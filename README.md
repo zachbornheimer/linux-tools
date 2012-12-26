@@ -6,7 +6,7 @@ Tools for Linux Automation
 makefile
 ========
 
-This makefile requires git, make, and admin permissions and will install the system to my liking.
+This makefile requires perl, git, make, curl, gcc, and admin permissions and will install the system to my liking.
 
 arch/setup.pl
 ========
