@@ -1,6 +1,20 @@
 #!/usr/bin/perl
 
-# Arguments
+#####################
+# Copyright (C) 2013 Zachary Bornheimer
+# Purpose: Install and Setup Arch Linux with limited interaction
+#
+# Procedure:
+#     Boot the Live Disc
+#     Acquire an Internet Connection
+#     wget https://raw.github.com/zachbornheimer/linux-tools/master/arch/setup.pl
+#     perl setup.pl [arguments] -- There a few questions to answer at the end
+#     reboot
+#
+# Arguments:
+#
+# Include the disc that is being operated on (this could be an array)
+#    disc:/dev/sda
 # Include partitions like this:
 #    ext4:root:/dev/sda1
 #    swap:/dev/sda2
@@ -15,9 +29,16 @@
 #    nohwclocktoutc
 #
 # Example:
-# perl setup.pl ext4:root:/dev/sda1 swap:/dev/sda2 ext4:home:/dev/sda3 timezone:America/New_York nohwclocktoutc
+# perl setup.pl disc:/dev/sda ext4:root:/dev/sda1 swap:/dev/sda2 ext4:home:/dev/sda3 timezone:America/New_York nohwclocktoutc
+#
+# Current Problems:
+#    Running grub-install, returns "Path `/boot/grub' is not readable by GRUB on boot.  Installation is impossible. Aborting.
+#
+# Tested with:
+#     Snapshot for April 01, 2013 -- Updated to work with systemd and the updated arch setup system
+#####################
 
-my $rootLocation;
+my $disc;
 
 print "You have given the following arguments:\n";
 foreach (@ARGV) {
@@ -43,6 +64,9 @@ MAKE_FILESYSTEMS: {
         } elsif (/^swap:/) {
             $_ =~ s/^.*://;
             system('mkswap ' . $_ . '; swapon ' . $_);
+        } elsif (/^disc:/) {
+            $_ =! s/^.*://;
+            $disc = $_;
         }
     }
     print "Filesystems made.\n";
@@ -88,7 +112,7 @@ if (fork()) {
 } else {
     CHROOT: {
         print "Chrooting...\n";
-        chroot("/mnt");
+        chroot("/mnt/arch");
     }
 
     SET_LOCALE: {
@@ -120,7 +144,7 @@ if (fork()) {
     }
     
     SETUP_GRUB: {
-    	system('yes | pacman -S grub-bios grub-efi-x86_64');
+    	system('pacman -S --noconfirm grub-bios grub-efi-x86_64');
     	print "Do you want to have grub boot into Arch automatically? [Y] ";
     	chomp(my $answer = <STDIN>);
     	if ($answer !~ /^n/i) {
@@ -134,7 +158,7 @@ if (fork()) {
 	        }
      	    }
     	}
-        system('grub-install --recheck ' . $rootLocation . '; grub-mkconfig -o /boot/grub/grub.cfg');
+        system('grub-install --recheck ' . $disc . '; grub-mkconfig -o /boot/grub/grub.cfg');
     }
     
     ADD_STARTUP_DAEMONS: {
