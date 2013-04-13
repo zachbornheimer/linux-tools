@@ -15,7 +15,9 @@
 #    nohwclocktoutc
 #
 # Example:
-# perl setup.pl ext4:root:/dev/sda1 swap:/dev/sda2 ext4:/dev/sda3 timezone:America/New_York nohwclocktoutc
+# perl setup.pl ext4:root:/dev/sda1 swap:/dev/sda2 ext4:home:/dev/sda3 timezone:America/New_York nohwclocktoutc
+
+my $rootLocation;
 
 print "You have given the following arguments:\n";
 foreach (@ARGV) {
@@ -36,6 +38,7 @@ MAKE_FILESYSTEMS: {
     foreach (@ARGV) {
         if (/^ext4:/) {
             $_ =~ s/^.*://;
+            $rootLocation = $_;
             system('mkfs.ext4 ' . $_);
         } elsif (/^swap:/) {
             $_ =~ s/^.*://;
@@ -88,29 +91,59 @@ if (fork()) {
         chroot("/mnt");
     }
 
-SET_LOCALE: {
-    print "Setting the Locale...\n";
-    local @ARGV = ('/etc/locale.gen');
-    $^I = '';
-    while (<>) {
-        s/^#en_US.UTF-8/en_US.UTF-8/;
-        print;
+    SET_LOCALE: {
+        print "Setting the Locale...\n";
+        local @ARGV = ('/etc/locale.gen');
+        $^I = '';
+        while (<>) {
+            s/^#en_US.UTF-8/en_US.UTF-8/;
+            print;
+        }
+        system('locale-gen;echo LANG=en_US.UTF-8 > /etc/locale.conf;export LANG=en_US.UTF-8');
     }
-    system('locale-gen;echo LANG=en_US.UTF-8 > /etc/locale.conf;export LANG=en_US.UTF-8');
-}
 
-SET_TIMEZONE: {
-    print "Setting the timezone...\n";
-    local @ARGV = @ARGV;
-    foreach (@ARGV) {
-        if (/^timezone:/) {
-            s/^timezone://;
-            if (-e "/usr/share/zoneinfo/" . $_) {
-                system('rm /etc/localtime; ln -s /usr/share/zoneinfo/' . $_ . ' /etc/localtime; echo ' . $_ . ' >/etc/timezone;');
+    SET_TIMEZONE: {
+        print "Setting the timezone...\n";
+        local @ARGV = @ARGV;
+        foreach (@ARGV) {
+            if (/^timezone:/) {
+                s/^timezone://;
+                if (-e "/usr/share/zoneinfo/" . $_) {
+                    system('rm /etc/localtime; ln -s /usr/share/zoneinfo/' . $_ . ' /etc/localtime; echo ' . $_ . ' >/etc/timezone;');
+                }
             }
         }
     }
-}
+    
+    INIT: {
+        system('mkinitcpio -p linux');	
+    }
+    
+    SETUP_GRUB: {
+    	print "Do you want to have grub boot into Arch automatically? [Y] ";
+    	chomp(my $answer = <STDIN>);
+    	if ($answer !~ /^n/i) {
+    	local @ARGV = ('/etc/default/grub');
+        	foreach (@ARGV) {
+            	while (<>) {
+    	            if (/^GRUB_TIMEOUT/) {
+    	                s/^GRUB_TIMEOUT.*/GRUB_TIMEOUT=\Q$grubTimeOut\E/;	
+    	                print;
+    	            }
+	        	}
+     	    }
+    	}
+        system('yes | pacman -S grub-bios grub-efi-x86_64');
+        system('grub-install --recheck ' . $rootLocation . '; grub-mkconfig -o /boot/grub/grub.cfg');
+    }
+    
+    ADD_STARTUP_DAEMONS: {
+        local @ARGV = ('dhcpcd');
+        foreach (@ARGV) {
+            system('systemctl enable ' . $_ . ';');	
+        }
+    }
+    
     exit;
 }
 print "Finished in the chroot.\n";
@@ -126,9 +159,7 @@ SET_HWCLOCK: {
     if ($setHWClockToUTC) {
         print "yes.\nSetting the hardware clock to UTC...\n";
         system('hwclock --systohc --localtime');
-    } else {
-        print "nope.\n";
     }
 }
 
-print "Please restart the computer when you are ready to complete the installation.";
+print "\nPlease restart the computer when you are ready to complete the installation.\n";
