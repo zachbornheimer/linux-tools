@@ -144,6 +144,14 @@ if (fork()) {
         }
     }
     
+    ROOT_PASSWORD: {
+    	print "Do you want to set a root password? [Y] ";
+    	chomp(my $answer = <STDIN>);
+    	if ($answer !~ /^n/i) {
+    		system('passwd');
+    	}
+    }
+    
     exit;
 }
 print "Finished in the chroot.\n";
