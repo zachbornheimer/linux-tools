@@ -31,14 +31,9 @@
 # Example:
 # perl setup.pl disc:/dev/sda ext4:root:/dev/sda1 swap:/dev/sda2 ext4:home:/dev/sda3 timezone:America/New_York nohwclocktoutc
 #
-# Current Problems:
-#    Running grub-install, returns "Path `/boot/grub' is not readable by GRUB on boot.  Installation is impossible. Aborting.
-#
 # Tested with:
 #     Snapshot for April 01, 2013 -- Updated to work with systemd and the updated arch setup system
 #####################
-
-my $disc;
 
 print "You have given the following arguments:\n";
 foreach (@ARGV) {
@@ -64,9 +59,6 @@ MAKE_FILESYSTEMS: {
         } elsif (/^swap:/) {
             $_ =~ s/^.*://;
             system('mkswap ' . $_ . '; swapon ' . $_);
-        } elsif (/^disc:/) {
-            $_ =! s/^.*://;
-            $disc = $_;
         }
     }
     print "Filesystems made.\n";
@@ -110,20 +102,16 @@ FSTAB: {
 if (fork()) {
 	wait;
 } else {
-    CHROOT: {
-        print "Chrooting...\n";
-        chroot("/mnt/arch");
-    }
 
     SET_LOCALE: {
         print "Setting the Locale...\n";
-        local @ARGV = ('/etc/locale.gen');
+        local @ARGV = ('/mnt/etc/locale.gen');
         $^I = '';
         while (<>) {
             s/^#en_US.UTF-8/en_US.UTF-8/;
             print;
         }
-        system('locale-gen;echo LANG=en_US.UTF-8 > /etc/locale.conf;export LANG=en_US.UTF-8');
+        system('arch-chroot /mnt locale-gen;echo LANG=en_US.UTF-8 > /etc/locale.conf;export LANG=en_US.UTF-8');
     }
 
     SET_TIMEZONE: {
@@ -132,19 +120,19 @@ if (fork()) {
         foreach (@ARGV) {
             if (/^timezone:/) {
                 s/^timezone://;
-                if (-e "/usr/share/zoneinfo/" . $_) {
-                    system('rm /etc/localtime; ln -s /usr/share/zoneinfo/' . $_ . ' /etc/localtime; echo ' . $_ . ' >/etc/timezone;');
+                if (-e "/mnt/usr/share/zoneinfo/" . $_) {
+                    system('arch-chroot /mnt rm /etc/localtime; ln -s /usr/share/zoneinfo/' . $_ . ' /etc/localtime; echo ' . $_ . ' >/etc/timezone;');
                 }
             }
         }
     }
     
     INIT: {
-        system('mkinitcpio -p linux');	
+        system('arch-chroot /mnt mkinitcpio -p linux');	
     }
     
     SETUP_GRUB: {
-    	system('pacman -S --noconfirm grub-bios grub-efi-x86_64');
+    	system('arch-chroot /mnt pacman -S --noconfirm grub-bios grub-efi-x86_64');
     	print "Do you want to have grub boot into Arch automatically? [Y] ";
     	chomp(my $answer = <STDIN>);
     	if ($answer !~ /^n/i) {
@@ -158,13 +146,15 @@ if (fork()) {
 	        }
      	    }
     	}
-        system('grub-install --recheck ' . $disc . '; grub-mkconfig -o /boot/grub/grub.cfg');
+        system('arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg');
     }
     
     ADD_STARTUP_DAEMONS: {
         local @ARGV = ('dhcpcd');
         foreach (@ARGV) {
-            system('systemctl enable ' . $_ . ';');	
+            my $t = 'arch-chroot /mnt systemctl enable ' . $_ . ';';	
+            print $t;
+            system($t);
         }
     }
     
@@ -172,11 +162,9 @@ if (fork()) {
     	print "Do you want to set a root password? [Y] ";
     	chomp(my $answer = <STDIN>);
     	if ($answer !~ /^n/i) {
-    		system('passwd');
+	    system('arch-chroot /mnt passwd');
     	}
     }
-    
-    exit;
 }
 print "Finished in the chroot.\n";
 
@@ -186,6 +174,7 @@ SET_HWCLOCK: {
     foreach (@ARGV) {
         if (/^nohwclocktoutc/) {
             $setHWClockToUTC = 0;
+            print "no.\n";
         }
     }
     if ($setHWClockToUTC) {
