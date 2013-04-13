@@ -120,6 +120,7 @@ if (fork()) {
     }
     
     SETUP_GRUB: {
+    	system('yes | pacman -S grub-bios grub-efi-x86_64');
     	print "Do you want to have grub boot into Arch automatically? [Y] ";
     	chomp(my $answer = <STDIN>);
     	if ($answer !~ /^n/i) {
@@ -130,10 +131,9 @@ if (fork()) {
     	                s/^GRUB_TIMEOUT.*/GRUB_TIMEOUT=\Q$grubTimeOut\E/;	
     	                print;
     	            }
-	        	}
+	        }
      	    }
     	}
-        system('yes | pacman -S grub-bios grub-efi-x86_64');
         system('grub-install --recheck ' . $rootLocation . '; grub-mkconfig -o /boot/grub/grub.cfg');
     }
     
